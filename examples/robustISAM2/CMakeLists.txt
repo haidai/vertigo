@@ -8,7 +8,7 @@ find_package(GTSAM REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 # boost is required
-find_package(Boost 1.46 COMPONENTS program_options REQUIRED)
+find_package(Boost 1.46 COMPONENTS system program_options REQUIRED)
 
 # specify our own source files that need to be compiled and linked into the lib
 include_directories(${PROJECT_SOURCE_DIR}/../../include)
