@@ -8,8 +8,12 @@
 #ifndef BETWEENFACTORMAXMIX_H_
 #define BETWEENFACTORMAXMIX_H_
 
+#include <boost/pointer_cast.hpp>
 #include <gtsam/linear/NoiseModel.h>
 #include <Eigen/Eigen>
+#include <gtsam/base/Vector.h>
+#include <gtsam/base/Matrix.h>
+#include <gtsam/slam/BetweenFactor.h>
 
 namespace vertigo {
 
@@ -34,15 +38,15 @@ namespace vertigo {
 
           // which hypothesis is more likely
           double m1 = this->noiseModel_->distance(error);
-          gtsam::noiseModel::Gaussian g1 = *(boost::shared_dynamic_cast<gtsam::noiseModel::Gaussian>(this->noiseModel_));
+          gtsam::noiseModel::Gaussian g1 = *(boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(this->noiseModel_));
           gtsam::Matrix info1(g1.R().transpose()*g1.R());
-          double nu1 = 1.0/sqrt(inverse(info1).determinant());
+          double nu1 = 1.0/sqrt(info1.inverse().determinant());
           double l1 = nu1 * exp(-0.5*m1);
 
           double m2 = nullHypothesisModel->distance(error);
-          gtsam::noiseModel::Gaussian g2 = *(boost::shared_dynamic_cast<gtsam::noiseModel::Gaussian>(nullHypothesisModel));
+          gtsam::noiseModel::Gaussian g2 = *(boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(nullHypothesisModel));
           gtsam::Matrix info2(g2.R().transpose()*g2.R());
-          double nu2 = 1.0/sqrt(inverse(info2).determinant());
+          double nu2 = 1.0/sqrt(info2.inverse().determinant());
           double l2 = nu2 * exp(-0.5*m2);
 
           // if the null hypothesis is more likely, than proceed by applying the weight ...

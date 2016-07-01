@@ -11,6 +11,7 @@
 //#include <gtsam/slam/planarSLAM.h>
 #include <gtsam/nonlinear/NonlinearFactor.h>
 #include "gtsam/base/LieScalar.h"
+#include <gtsam/slam/BetweenFactor.h>
 
 #include <iostream>
 using std::cout;

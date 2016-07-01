@@ -12,13 +12,15 @@
 
 #include <gtsam/base/DerivedValue.h>
 #include <gtsam/base/Lie.h>
+#include <gtsam/base/Vector.h>
+#include <gtsam/base/Matrix.h>
 
 namespace vertigo {
 
   /**
    * SwitchVariableLinear is a wrapper around double to allow it to be a Lie type
    */
-  struct SwitchVariableLinear : public DerivedValue<SwitchVariableLinear> {
+  struct SwitchVariableLinear : public gtsam::DerivedValue<SwitchVariableLinear> {
 
     /** default constructor */
     SwitchVariableLinear() : d_(0.0) {};
@@ -49,7 +51,7 @@ namespace vertigo {
     inline static size_t Dim() { return 1; }
 
     /** Update the SwitchVariableLinear with a tangent space update */
-    inline SwitchVariableLinear retract(const Vector& v) const {
+    inline SwitchVariableLinear retract(const gtsam::Vector& v) const {
       double x = value() + v(0);
 
       if (x>1.0) x=1.0;
@@ -59,7 +61,7 @@ namespace vertigo {
     }
 
     /** @return the local coordinates of another object */
-    inline Vector localCoordinates(const SwitchVariableLinear& t2) const { return Vector_(1,(t2.value() - value())); }
+    inline gtsam::Vector localCoordinates(const SwitchVariableLinear& t2) const { return gtsam::Vector1(t2.value() - value()); }
 
     // Group requirements
 
@@ -75,10 +77,10 @@ namespace vertigo {
 
     /** between operation */
     inline SwitchVariableLinear between(const SwitchVariableLinear& l2,
-        boost::optional<Matrix&> H1=boost::none,
-        boost::optional<Matrix&> H2=boost::none) const {
-      if(H1) *H1 = -eye(1);
-      if(H2) *H2 = eye(1);
+        boost::optional<gtsam::Matrix&> H1=boost::none,
+        boost::optional<gtsam::Matrix&> H2=boost::none) const {
+      if(H1) *H1 = -gtsam::Matrix::Identity(1,1);
+      if(H2) *H2 = gtsam::Matrix::Identity(1,1);
       return SwitchVariableLinear(l2.value() - value());
     }
 
@@ -90,10 +92,10 @@ namespace vertigo {
     // Lie functions
 
     /** Expmap around identity */
-    static inline SwitchVariableLinear Expmap(const Vector& v) { return SwitchVariableLinear(v(0)); }
+    static inline SwitchVariableLinear Expmap(const gtsam::Vector& v) { return SwitchVariableLinear(v(0)); }
 
     /** Logmap around identity - just returns with default cast back */
-    static inline Vector Logmap(const SwitchVariableLinear& p) { return Vector_(1,p.value()); }
+    static inline gtsam::Vector Logmap(const SwitchVariableLinear& p) { return gtsam::Vector1(p.value()); }
 
   private:
       double d_;
