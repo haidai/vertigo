@@ -15,7 +15,7 @@
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/Matrix.h>
 
-namespace vertigo {
+namespace gtsam {
 
   /**
    * SwitchVariableLinear is a wrapper around double to allow it to be a Lie type
@@ -100,6 +100,8 @@ namespace vertigo {
   private:
       double d_;
   };
+
+  template <> struct traits<SwitchVariableLinear> : public gtsam::LieGroup<SwitchVariableLinear> {};
 }
 
 
