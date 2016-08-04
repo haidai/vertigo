@@ -25,6 +25,7 @@
 #include <fstream>
 
 #include "BetweenFactorHai.h"
+#include "write_graph.h"
 #include "timer.h"
 
 using namespace std;
@@ -140,7 +141,6 @@ int main(int argc, char *argv[])
     parameters.relinearizeSkip = 1;
     gtsam::ISAM2 isam(parameters);
 
-
     // Insert new observations as factors into graph and initialEstimate and
     // then hand them over to iSAM2 incrementally (implying that we clear out
     // graph and initialEstimate everytime).
@@ -150,6 +150,8 @@ int main(int argc, char *argv[])
 
     printf("Number of poses %d\n", poses.size());
     printf("Number of edges %d\n", edges.size());
+    auto fname = std::string("myfile.json");
+    //writeGraph("myfile.json", initialEstimate);
 
     // Build problem
     // Loop through each pose
@@ -198,7 +200,8 @@ int main(int argc, char *argv[])
 
             } else if (edge.switchable) {
                 // create new switch variable
-                initialEstimate.insert(gtsam::Symbol('s', ++switchCounter), gtsam::Vector1(1.0));
+                initialEstimate.insert(gtsam::Symbol('s', ++switchCounter),
+                                       (gtsam::Vector1() << gtsam::Vector1::Constant(1)).finished());
 
                 // create switch prior factor
                 gtsam::SharedNoiseModel switchPriorModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector1(1.0));

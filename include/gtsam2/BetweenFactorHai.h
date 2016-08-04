@@ -28,9 +28,9 @@ namespace gtsam {
           boost::optional<gtsam::Matrix&> H3 =  boost::none) const
         {
             Vector error = betweenFactor.evaluateError(p1, p2, H1, H2);
-            error *= s.value();
-            if (H1) *H1 = *H1 * s.value();
-            if (H2) *H2 = *H2 * s.value();
+            error *= s[0];
+            if (H1) *H1 = *H1 * s[0];
+            if (H2) *H2 = *H2 * s[0];
             if (H3) *H3 = error;
 
             return error;
