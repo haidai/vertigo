@@ -1,22 +1,28 @@
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/prettywriter.h>
+#include <rapidjson/filewritestream.h>
 
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/base/Vector.h>
 #include <gtsam/slam/BetweenFactor.h>
 
+#include <fstream>
 #include <iostream>
 #include "BetweenFactorHai.h"
 #include "write_graph.h"
 #include <tuple>
+#include <stdio.h>
+
 
 int writeGraph(const std::string &fname, const gtsam::Values &v, const gtsam::NonlinearFactorGraph& graph) {
     using namespace rapidjson;
-    StringBuffer s;
-    PrettyWriter<StringBuffer> writer(s);
-    writer.SetFormatOptions(kFormatSingleLineArray);
+    FILE *file = fopen(fname.c_str(), "w");
+    char buffer[65536];
+    FileWriteStream fws(file, buffer, sizeof(buffer));
+
+    PrettyWriter<FileWriteStream> writer(fws);
 
     writer.StartObject();
     writer.Key("poses");
@@ -25,11 +31,13 @@ int writeGraph(const std::string &fname, const gtsam::Values &v, const gtsam::No
         gtsam::Symbol s(kv.key);
 
         writer.StartArray();
+        writer.SetFormatOptions(kFormatSingleLineArray);
         writer.Int64(s.index());
         writer.Double(kv.value.x());
         writer.Double(kv.value.y());
         writer.Double(kv.value.theta());
         writer.EndArray();
+        writer.SetFormatOptions(kFormatDefault);
     }
     writer.EndArray();
 
@@ -47,11 +55,11 @@ int writeGraph(const std::string &fname, const gtsam::Values &v, const gtsam::No
         boost::shared_ptr<gtsam::BetweenFactorHai<gtsam::Pose2> > factor_switch =
                 boost::dynamic_pointer_cast<gtsam::BetweenFactorHai<gtsam::Pose2> >(factor_);
         if (factor_switch) {
-            gtsam::Vector1 sval = v.at<gtsam::Vector1>(factor_switch->key3());
+            auto sval = v.at<gtsam::Switch>(factor_switch->key3());
             loopClosureEdges.push_back(std::make_tuple(
                     gtsam::Symbol(factor_switch->key1()).index(),
                     gtsam::Symbol(factor_switch->key2()).index(),
-                    sval[0]));
+                    sval.val()[0]));
         }
     }
 
@@ -59,10 +67,12 @@ int writeGraph(const std::string &fname, const gtsam::Values &v, const gtsam::No
     writer.StartArray();
     for (auto ledge: loopClosureEdges) {
         writer.StartArray();
+        writer.SetFormatOptions(kFormatSingleLineArray);
         writer.Int64(std::get<0>(ledge));
         writer.Int64(std::get<1>(ledge));
         writer.Double(std::get<2>(ledge));
         writer.EndArray();
+        writer.SetFormatOptions(kFormatDefault);
     }
     writer.EndArray();
 
@@ -70,13 +80,16 @@ int writeGraph(const std::string &fname, const gtsam::Values &v, const gtsam::No
     writer.StartArray();
     for (auto oedge: odomEdges) {
         writer.StartArray();
+        writer.SetFormatOptions(kFormatSingleLineArray);
         writer.Int64(std::get<0>(oedge));
         writer.Int64(std::get<1>(oedge));
         writer.EndArray();
+        writer.SetFormatOptions(kFormatDefault);
     }
     writer.EndArray();
     writer.EndObject();
-    std::cout << s.GetString() << std::endl;
+    fws.Flush();
+    fclose(file);
     return 0;
 }
 
@@ -92,7 +105,8 @@ void test_graph() {
     //v.insert(gtsam::Symbol('s', 0), v1);
     //v.insert(gtsam::Symbol('s', 0), gtsam::Vector1::Constant(.75));
     //v.insert(gtsam::Symbol('s', 0), gtsam::Vector1(1.));
-    v.insert(gtsam::Symbol('s', 0), (gtsam::Vector1() << gtsam::Vector1::Constant(.75)).finished());
+    //v.insert(gtsam::Symbol('s', 0), (gtsam::Vector1() << gtsam::Vector1::Constant(.75)).finished());
+    v.insert(gtsam::Symbol('s', 0), gtsam::Switch(.75));
 
     auto odom_model = gtsam::noiseModel::Gaussian::Covariance(gtsam::Matrix33::Identity(3,3));
 
@@ -109,4 +123,3 @@ void test_graph() {
 
     writeGraph("file.json", v, graph);
 }
-

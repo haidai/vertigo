@@ -11,17 +11,14 @@
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/GenericValue.h>
 #include <gtsam/base/Matrix.h>
-#include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Symbol.h>
+#include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
-
 #include <gtsam/slam/PriorFactor.h>
 #include <gtsam/slam/BetweenFactor.h>
 
-#include "boost/foreach.hpp"
-#define foreach BOOST_FOREACH
-
+#include <sstream>
 #include <fstream>
 
 #include "BetweenFactorHai.h"
@@ -121,6 +118,11 @@ bool parseDataset(string inputFile, vector<Pose>&poses, vector<Edge>&edges,multi
      return true;
 }
 
+std::string fname(std::string preffix, int count) {
+    std::stringstream ss;
+    ss << preffix << count << ".json";
+    return ss.str();
+}
 
 // ===================================================================
 int main(int argc, char *argv[])
@@ -141,17 +143,15 @@ int main(int argc, char *argv[])
     parameters.relinearizeSkip = 1;
     gtsam::ISAM2 isam(parameters);
 
-    // Insert new observations as factors into graph and initialEstimate and
+    // Insert new observations as factors into incrementalFactors and incrementalValues and
     // then hand them over to iSAM2 incrementally (implying that we clear out
     // graph and initialEstimate everytime).
-    gtsam::NonlinearFactorGraph graph;
-    gtsam::Values initialEstimate;
+    gtsam::NonlinearFactorGraph incrementalFactors, allFactors;
+    gtsam::Values incrementalValues;
     int switchCounter = -1;
 
-    printf("Number of poses %d\n", poses.size());
-    printf("Number of edges %d\n", edges.size());
-    auto fname = std::string("myfile.json");
-    //writeGraph("myfile.json", initialEstimate);
+    printf("isam2: Number of poses %d\n", poses.size());
+    printf("isam2: Number of edges %d\n", edges.size());
 
     // Build problem
     // Loop through each pose
@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
                 // (iSAM needs at least two factors on a variable), we can't ask
                 // for a smoothed estimate of it yet
                 if (edge.i == 0) {
-                    initialEstimate.insert(gtsam::Symbol('x', p.id), gtsam::Pose2(edge.x, edge.y, edge.th));
+                    incrementalValues.insert(gtsam::Symbol('x', p.id), gtsam::Pose2(edge.x, edge.y, edge.th));
 
                 } else {
                     gtsam::Pose2 predecessorPose = isam.calculateEstimate<gtsam::Pose2>(gtsam::Symbol('x', p.id - 1));
@@ -187,39 +187,53 @@ int main(int argc, char *argv[])
                         return 0;
                     }
 
-                    initialEstimate.insert(gtsam::Symbol('x', p.id), predecessorPose * gtsam::Pose2(edge.x, edge.y, edge.th));
+                    incrementalValues.insert(gtsam::Symbol('x', p.id), predecessorPose * gtsam::Pose2(edge.x, edge.y, edge.th));
                 }
 
                 //globalInitialEstimate.insertPose(p.id, predecessorPose * Pose2(e.x, e.y, e.th));
                 gtsam::SharedNoiseModel odom_model = gtsam::noiseModel::Gaussian::Covariance(edge.covariance);
                 printf("graph: Odom BetweenFactor x%d -- x%d\n", edge.i, edge.j);
-                graph.add(gtsam::BetweenFactor<gtsam::Pose2>(
+                incrementalFactors.add(gtsam::BetweenFactor<gtsam::Pose2>(
                             gtsam::Symbol('x', edge.i), gtsam::Symbol('x', edge.j),
                             gtsam::Pose2(edge.x, edge.y, edge.th),
                             odom_model));
+                allFactors.add(gtsam::BetweenFactor<gtsam::Pose2>(
+                        gtsam::Symbol('x', edge.i), gtsam::Symbol('x', edge.j),
+                        gtsam::Pose2(edge.x, edge.y, edge.th),
+                        odom_model));
 
             } else if (edge.switchable) {
                 // create new switch variable
-                initialEstimate.insert(gtsam::Symbol('s', ++switchCounter),
-                                       (gtsam::Vector1() << gtsam::Vector1::Constant(1)).finished());
+                incrementalValues.insert(gtsam::Symbol('s', ++switchCounter),
+                                         gtsam::Switch(1));
+                                       //(gtsam::Vector1() << gtsam::Vector1::Constant(1)).finished());
 
                 // create switch prior factor
                 gtsam::SharedNoiseModel switchPriorModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector1(1.0));
 
                 printf("graph: Switch Prior s%d\n", switchCounter);
-                graph.add(gtsam::PriorFactor<gtsam::Vector1>(
+                incrementalFactors.add(gtsam::PriorFactor<gtsam::Switch>(
                             gtsam::Symbol('s', switchCounter),
-                            gtsam::Vector1(1.0),
+                            gtsam::Switch(1.0),
                             switchPriorModel));
+                allFactors.add(gtsam::PriorFactor<gtsam::Switch>(
+                        gtsam::Symbol('s', switchCounter),
+                        gtsam::Switch(1.0),
+                        switchPriorModel));
 
                 // create switchable odometry factor
                 printf("graph: Switch BetweenFactor x%d -- x%d -- s%d\n", edge.i, edge.j, switchCounter);
                 gtsam::SharedNoiseModel odom_model = gtsam::noiseModel::Gaussian::Covariance(edge.covariance);
-                graph.add(gtsam::BetweenFactorHai<gtsam::Pose2>(
+                incrementalFactors.add(gtsam::BetweenFactorHai<gtsam::Pose2>(
                             gtsam::Symbol('x', edge.i),
                             gtsam::Symbol('x', edge.j),
                             gtsam::Symbol('s', switchCounter),
                             gtsam::Pose2(edge.x, edge.y, edge.th), odom_model));
+                allFactors.add(gtsam::BetweenFactorHai<gtsam::Pose2>(
+                        gtsam::Symbol('x', edge.i),
+                        gtsam::Symbol('x', edge.j),
+                        gtsam::Symbol('s', switchCounter),
+                        gtsam::Pose2(edge.x, edge.y, edge.th), odom_model));
             }
         }
 
@@ -228,28 +242,34 @@ int main(int argc, char *argv[])
             // add prior for first pose
             gtsam::noiseModel::Diagonal::shared_ptr prior_model = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector3::Constant(0.1));
             printf("graph: x0 prior\n");
-            graph.add(gtsam::PriorFactor<gtsam::Pose2>(
+            incrementalFactors.add(gtsam::PriorFactor<gtsam::Pose2>(
                         gtsam::Symbol('x', 0),
                         gtsam::Pose2(p.x, p.y, p.th),
                         prior_model));
+            allFactors.add(gtsam::PriorFactor<gtsam::Pose2>(
+                    gtsam::Symbol('x', 0),
+                    gtsam::Pose2(p.x, p.y, p.th),
+                    prior_model));
 
             // initial value for first pose
-            initialEstimate.insert(gtsam::Symbol('x', 0), gtsam::Pose2(p.x, p.y, p.th));
+            incrementalValues.insert(gtsam::Symbol('x', 0), gtsam::Pose2(p.x, p.y, p.th));
         } else {
-            printf("isam: update with estimate\n");
-            isam.update(graph, initialEstimate);
-            printf("isam: calculate\n");
+            printf("isam2: update with estimate\n");
+            isam.update(incrementalFactors, incrementalValues);
+            printf("isam2: calculate\n");
             isam.update();
             gtsam::Values currentEstimate = isam.calculateEstimate();
+            auto jsonName = fname("myfile", i);
+            printf("json: writing to %s\n", jsonName.c_str());
+            writeGraph(jsonName, currentEstimate, allFactors);
 
             if (i % 100 || i == std::max(poses.size() - 1, size_t(0))) {
                 std::cout << "****************************************************" << std::endl;
-                std::cout << "Iteration " << i << ": " << std::endl;
-                currentEstimate.print("Current estimate: ");
+                std::cout << "Iteration " << i << "/" << poses.size() << ": " << std::endl;
             }
 
-            graph.resize(0);
-            initialEstimate.clear();
+            incrementalFactors.resize(0);
+            incrementalValues.clear();
         }
     }
 
