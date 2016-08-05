@@ -36,7 +36,7 @@ namespace gtsam {
 
         /* Required for DerivedValue.retract_ */
         Switch retract(const Vector & delta) const {
-            return Switch(max(min(v_[0] + delta[0], 1.0), 0.0);
+            return Switch(std::max(std::min(v_[0] + delta[0], 1.0), 0.0));
         }
 
         /* Required for DerivedValue.localCoordinates_ */
@@ -48,6 +48,8 @@ namespace gtsam {
 
     template<>
     struct traits<Switch>: Testable<Switch> {
+        typedef Eigen::Matrix<double, 1, 1> TangentVector;
+
         /** Required b/c of GenericValue **/
         static Vector1 Local(Switch origin, Switch other,
                              OptionalJacobian<1,1> H1 = boost::none,
@@ -58,7 +60,7 @@ namespace gtsam {
         }
 
         /** Required b/c of GenericValue **/
-        static Switch Retract(Switch origin, Vector1 & v,
+        static Switch Retract(Switch origin, const Vector1 & v,
                               OptionalJacobian<1,1> H1 = boost::none,
                               OptionalJacobian<1,1> H2 = boost::none) {
             if (H1) (*H1)[0] = 1.0;
@@ -68,7 +70,7 @@ namespace gtsam {
 
         /** Required b/c of GenericValue **/
         static int GetDimension(const Switch& s) {
-            return s.dim();
+            return (int) s.dim();
         }
     };
 
