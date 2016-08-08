@@ -124,6 +124,25 @@ std::string fname(std::string preffix, int count) {
     return ss.str();
 }
 
+//class Problem {
+//    public:
+//    gtsam::NonlinearFactorGraph incrementalFactors, allFactors;
+//    gtsam::Values incrementalValues;
+//
+//    void newGraph() {
+//        incrementalFactors.resize(0);
+//        incrementalValues.clear();
+//    }
+//
+//    template<class FACTORTYPE, class VALUETYPE>
+//    void add(gtsam::Key k, VALUETYPE v, FACTORTYPE factor) {
+//        incrementalFactors.add(factor);
+//        incrementalValues.insert(k, v);
+//    }
+//
+//    void calculateEstimate() = 0;
+//};
+
 // ===================================================================
 int main(int argc, char *argv[])
 {
@@ -152,6 +171,7 @@ int main(int argc, char *argv[])
 
     printf("isam2: Number of poses %d\n", poses.size());
     printf("isam2: Number of edges %d\n", edges.size());
+    //JsonGraph writer("myfile.json");
 
     // Build problem
     // Loop through each pose
@@ -202,7 +222,7 @@ int main(int argc, char *argv[])
                         gtsam::Pose2(edge.x, edge.y, edge.th),
                         odom_model));
 
-            } else if (edge.switchable) {
+            } else {//if (edge.switchable) {
                 // create new switch variable
                 incrementalValues.insert(gtsam::Symbol('s', ++switchCounter),
                                          gtsam::Switch(1));
@@ -234,7 +254,19 @@ int main(int argc, char *argv[])
                         gtsam::Symbol('x', edge.j),
                         gtsam::Symbol('s', switchCounter),
                         gtsam::Pose2(edge.x, edge.y, edge.th), odom_model));
-            }
+            } //else {
+                // Regular loop closure
+                //gtsam::SharedNoiseModel odom_model = gtsam::noiseModel::Gaussian::Covariance(edge.covariance);
+                //incrementalFactors.add(gtsam::BetweenFactor<gtsam::Pose2>(
+                //            gtsam::Symbol('x', edge.i),
+                //            gtsam::Symbol('x', edge.j),
+                //            gtsam::Pose2(edge.x, edge.y, edge.th), odom_model));
+
+                //allFactors.add(gtsam::BetweenFactor<gtsam::Pose2>(
+                //        gtsam::Symbol('x', edge.i),
+                //        gtsam::Symbol('x', edge.j),
+                //        gtsam::Pose2(edge.x, edge.y, edge.th), odom_model));
+            //}
         }
 
         if (p.id == 0) {
@@ -261,6 +293,7 @@ int main(int argc, char *argv[])
             gtsam::Values currentEstimate = isam.calculateEstimate();
             auto jsonName = fname("myfile", i);
             printf("json: writing to %s\n", jsonName.c_str());
+            //writer.add(std::to_string(i), currentEstimate, allFactors);
             writeGraph(jsonName, currentEstimate, allFactors);
 
             if (i % 100 || i == std::max(poses.size() - 1, size_t(0))) {
