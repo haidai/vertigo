@@ -7,6 +7,7 @@
 
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/nonlinear/ISAM2.h>
+#include <gtsam/nonlinear/GaussNewtonOptimizer.h>
 
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/GenericValue.h>
@@ -158,15 +159,18 @@ int main(int argc, char *argv[])
 
     // init iSam
     gtsam::ISAM2Params parameters;
-    parameters.relinearizeThreshold = 0.01;
+    parameters.relinearizeThreshold = 0.1;
     parameters.relinearizeSkip = 1;
     gtsam::ISAM2 isam(parameters);
+
+    std::string solver = "gauss";
+
 
     // Insert new observations as factors into incrementalFactors and incrementalValues and
     // then hand them over to iSAM2 incrementally (implying that we clear out
     // graph and initialEstimate everytime).
     gtsam::NonlinearFactorGraph incrementalFactors, allFactors;
-    gtsam::Values incrementalValues;
+    gtsam::Values incrementalValues, allValues;
     int switchCounter = -1;
 
     printf("isam2: Number of poses %d\n", poses.size());
@@ -196,8 +200,9 @@ int main(int argc, char *argv[])
                 // If it links to the first pose, since we can't incrementally solve for the first pose
                 // (iSAM needs at least two factors on a variable), we can't ask
                 // for a smoothed estimate of it yet
-                if (edge.i == 0) {
+                if (edge.i == 0 or solver.compare("gauss") == 0) {
                     incrementalValues.insert(gtsam::Symbol('x', p.id), gtsam::Pose2(edge.x, edge.y, edge.th));
+                    allValues.insert(gtsam::Symbol('x', p.id), gtsam::Pose2(edge.x, edge.y, edge.th));
 
                 } else {
                     gtsam::Pose2 predecessorPose = isam.calculateEstimate<gtsam::Pose2>(gtsam::Symbol('x', p.id - 1));
@@ -208,6 +213,7 @@ int main(int argc, char *argv[])
                     }
 
                     incrementalValues.insert(gtsam::Symbol('x', p.id), predecessorPose * gtsam::Pose2(edge.x, edge.y, edge.th));
+                    allValues.insert(gtsam::Symbol('x', p.id), predecessorPose * gtsam::Pose2(edge.x, edge.y, edge.th));
                 }
 
                 //globalInitialEstimate.insertPose(p.id, predecessorPose * Pose2(e.x, e.y, e.th));
@@ -227,6 +233,8 @@ int main(int argc, char *argv[])
                 incrementalValues.insert(gtsam::Symbol('s', ++switchCounter),
                                          gtsam::Switch(1));
                                        //(gtsam::Vector1() << gtsam::Vector1::Constant(1)).finished());
+                allValues.insert(gtsam::Symbol('s', ++switchCounter),
+                                 gtsam::Switch(1));
 
                 // create switch prior factor
                 gtsam::SharedNoiseModel switchPriorModel = gtsam::noiseModel::Diagonal::Sigmas(gtsam::Vector1(1.0));
@@ -285,15 +293,26 @@ int main(int argc, char *argv[])
 
             // initial value for first pose
             incrementalValues.insert(gtsam::Symbol('x', 0), gtsam::Pose2(p.x, p.y, p.th));
+            allValues.insert(gtsam::Symbol('x', 0), gtsam::Pose2(p.x, p.y, p.th));
         } else {
-            printf("isam2: update with estimate\n");
-            isam.update(incrementalFactors, incrementalValues);
-            printf("isam2: calculate\n");
-            isam.update();
-            gtsam::Values currentEstimate = isam.calculateEstimate();
+            gtsam::Values currentEstimate;
+            if (solver == "isam") {
+                printf("isam2: update with estimate\n");
+                isam.update(incrementalFactors, incrementalValues);
+                printf("isam2: calculate\n");
+                isam.update();
+                currentEstimate = isam.calculateEstimate();
+            } else {
+                printf("gauss_newton: solving...\n");
+                gtsam::GaussNewtonParams gn_params;
+                gn_params.relativeErrorTol = 1e-5;
+                gtsam::GaussNewtonOptimizer optimizer(allFactors, allValues, gn_params);
+                currentEstimate = optimizer.optimize();
+                printf("gaus_newton: updated\n");
+            }
+
             auto jsonName = fname("myfile", i);
             printf("json: writing to %s\n", jsonName.c_str());
-            //writer.add(std::to_string(i), currentEstimate, allFactors);
             writeGraph(jsonName, currentEstimate, allFactors);
 
             if (i % 100 || i == std::max(poses.size() - 1, size_t(0))) {
